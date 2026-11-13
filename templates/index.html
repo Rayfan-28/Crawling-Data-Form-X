@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crawling & Reprocessing X</title>
+    <style>
+        :root { color-scheme: light; font-family: Arial, sans-serif; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #f1f5f9; color: #172033; }
+        .container { width: min(1180px, 94%); margin: 32px auto; }
+        header { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 24px; }
+        h1, h2 { margin: 0 0 12px; }
+        h1 { font-size: 28px; }
+        .muted { color: #64748b; }
+        .card { background: #fff; border-radius: 14px; padding: 22px; margin-bottom: 20px; box-shadow: 0 8px 24px #0f172a12; }
+        form { display: grid; gap: 8px; }
+        label { font-weight: 700; margin-top: 6px; }
+        input, select, button { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #cbd5e1; }
+        button, .button { display: inline-block; border: 0; background: #2563eb; color: #fff; cursor: pointer; text-decoration: none; padding: 10px 14px; border-radius: 8px; font-weight: 700; }
+        button:hover, .button:hover { background: #1d4ed8; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; min-width: 920px; border-collapse: collapse; }
+        th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+        th { background: #eff6ff; color: #1e3a8a; white-space: nowrap; }
+        td.text { min-width: 260px; white-space: pre-wrap; word-break: break-word; }
+        tr:hover td { background: #f8fafc; }
+        .empty { padding: 20px; text-align: center; color: #64748b; }
+        @media (max-width: 650px) { header { display: block; } .button { margin-top: 10px; } .container { margin-top: 20px; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div>
+            <h1>Crawling & Reprocessing X</h1>
+            <div class="muted">Data tersimpan di tabel <strong>twitter</strong></div>
+        </div>
+        {% if show_data %}<a class="button" href="{{ url_for('index') }}">Kembali ke Form</a>{% endif %}
+    </header>
+
+    {% if not show_data %}
+    <section class="card">
+        <h2>Form Crawling Data X</h2>
+        <form action="{{ url_for('crawl') }}" method="POST">
+            <label for="keyword">Keyword</label>
+            <input id="keyword" type="text" name="keyword" required>
+            <label for="limit">Limit Data</label>
+            <input id="limit" type="number" name="limit" value="100" min="1" required>
+            <label for="start_date">Dari Tanggal</label>
+            <input id="start_date" type="date" name="start_date" required>
+            <label for="end_date">Sampai Tanggal</label>
+            <input id="end_date" type="date" name="end_date" required>
+            <button type="submit">Jalankan Crawling & Simpan DB</button>
+        </form>
+    </section>
+
+    <a class="button" href="{{ url_for('data') }}">Lihat Data Tabel Twitter</a>
+    {% else %}
+    <section class="card">
+        <h2>Data Tabel Twitter</h2>
+        <form method="GET" action="{{ url_for('data') }}">
+            <label for="keyword-filter">Pilih Keyword</label>
+            <select id="keyword-filter" name="keyword">
+                <option value="">Semua keyword</option>
+                {% for keyword in keywords %}
+                <option value="{{ keyword }}" {% if keyword == selected_keyword %}selected{% endif %}>{{ keyword }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Tampilkan Data</button>
+        </form>
+        <p><a class="button" href="{{ url_for('data_csv', keyword=selected_keyword) }}">Download CSV</a></p>
+        <h3>Hitung TF-IDF Kata</h3>
+        <form method="GET" action="{{ url_for('data') }}">
+            <input type="hidden" name="keyword" value="{{ selected_keyword }}">
+            <label for="query">Kata Query</label>
+            <input id="query" type="text" name="query" value="{{ query }}" placeholder="Contoh: makan" required>
+            <button type="submit">Hitung TF-IDF</button>
+        </form>
+        {% if tfidf %}
+        <p>Total dokumen: {{ tfidf.total_documents }}<br>
+           Dokumen mengandung “{{ tfidf.query }}”: {{ tfidf.matching_documents }}<br>
+           IDF: {{ '%.6f'|format(tfidf.idf) }}</p>
+        {% if tfidf.results %}
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>DokID</th><th>Isi Dokumen Bersih</th><th>TF</th><th>IDF</th><th>TF-IDF</th></tr></thead>
+                <tbody>
+                {% for result in tfidf.results %}
+                    <tr><td>{{ result.id }}</td><td class="text">{{ result.text }}</td><td>{{ '%.6f'|format(result.tf) }}</td><td>{{ '%.6f'|format(result.idf) }}</td><td>{{ '%.6f'|format(result.tfidf) }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty">Kata query tidak ditemukan.</div>{% endif %}
+        {% endif %}
+        <div class="muted">{{ rows|length }} baris ditampilkan.</div>
+        {% if rows %}
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>ID</th><th>Time Slot</th><th>Keyword</th><th>Username</th><th>Waktu</th><th>Teks Tweet</th><th>Teks Bersih</th></tr></thead>
+                <tbody>
+                {% for row in rows %}
+                    <tr><td>{{ row.id }}</td><td>{{ row.time_slot }}</td><td>{{ row.keyword or '-' }}</td><td>{{ row.username or '-' }}</td><td>{{ row.waktu or '-' }}</td><td class="text">{{ row.isi_twit }}</td><td class="text">{{ row.processed_text or '-' }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty">Belum ada data di tabel twitter.</div>{% endif %}
+    </section>
+    {% endif %}
+</div>
+</body>
+</html>
+
